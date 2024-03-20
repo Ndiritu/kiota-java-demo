@@ -15,15 +15,6 @@ repositories {
     mavenCentral()
 }
 
-// configurations.all {
-//     exclude group: 'com.microsoft.graph', module: 'microsoft-graph-core'
-//     exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-authentication-azure'
-//     exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-http-okHttp'
-//     exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-serialization-json'
-//     exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-serialization-text'
-//     exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-serialization-form'
-//     exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-serialization-multipart'
-// }
 
 dependencies {
     // Use JUnit Jupiter for testing.

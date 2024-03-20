@@ -77,14 +77,6 @@ class AppTest {
             properties.getAdditionalData().put("@microsoft.graph.conflictBehavior", "replace");
             uploadSessionRequest.setItem(properties);
 
-            // OkHttpClient okHttpClientWithProxy = GraphClientFactory.create().proxy(
-            //     new Proxy(Proxy.Type.HTTP, new InetSocketAddress("172.18.38.65", 8888))
-            // ).build();
-            // GraphServiceClient client = new GraphServiceClient(
-            //     new AzureIdentityAuthenticationProvider(credential, new String[] {}, ".default"),
-            //     okHttpClientWithProxy
-            // );
-
             GraphServiceClient client = new GraphServiceClient(credential, ".default");
 
             String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
