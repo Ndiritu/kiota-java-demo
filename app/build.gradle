@@ -22,6 +22,12 @@ dependencies {
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
     testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.2'
+    testImplementation 'io.opentelemetry:opentelemetry-api:1.37.0'
+    testImplementation 'io.opentelemetry:opentelemetry-context:1.37.0'
+    testImplementation 'io.opentelemetry.semconv:opentelemetry-semconv:1.25.0-alpha'
+    testImplementation 'io.opentelemetry.semconv:opentelemetry-semconv-incubating:1.25.0-alpha'
+    testImplementation 'io.github.std-uritemplate:std-uritemplate:0.0.55'
+    testImplementation 'commons-codec:commons-codec:1.16.1'
 
     // Use JUnit Jupiter Engine for testing.
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'

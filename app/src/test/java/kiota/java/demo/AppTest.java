@@ -3,6 +3,7 @@
  */
 package kiota.java.demo;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.junit.jupiter.api.Test;
 
 import com.azure.core.credential.TokenCredential;
@@ -25,6 +27,9 @@ import com.microsoft.graph.core.requests.GraphClientFactory;
 import com.microsoft.graph.core.tasks.LargeFileUploadTask;
 import com.microsoft.graph.core.tasks.PageIterator;
 import com.microsoft.graph.drives.item.items.item.createuploadsession.CreateUploadSessionPostRequestBody;
+import com.microsoft.graph.models.Attachment;
+import com.microsoft.graph.models.AttachmentItem;
+import com.microsoft.graph.models.AttachmentType;
 import com.microsoft.graph.models.DriveItem;
 import com.microsoft.graph.models.DriveItemUploadableProperties;
 import com.microsoft.graph.models.Message;
@@ -35,6 +40,8 @@ import com.microsoft.graph.models.User;
 import com.microsoft.graph.models.odataerrors.ODataError;
 import com.microsoft.graph.serviceclient.GraphServiceClient;
 import com.microsoft.kiota.ApiException;
+import com.microsoft.kiota.HttpMethod;
+import com.microsoft.kiota.RequestInformation;
 import com.microsoft.graph.core.authentication.AzureIdentityAuthenticationProvider;
 
 // import okhttp3.Call;
@@ -53,18 +60,137 @@ import java.io.FileInputStream;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
+import java.net.URI;
 
 class AppTest {
 
     final String USER_ID = "pgichuhi@sk7xg.onmicrosoft.com";
 
+    @Test
+    void testContentLengthFixes() {
+        try {
+            TokenCredential credential = new ClientSecretCredentialBuilder()
+                .clientId(System.getenv("kiota_client_id"))
+                .clientSecret(System.getenv("kiota_client_secret"))
+                .tenantId(System.getenv("kiota_tenant_id"))
+                .build();
+
+            GraphServiceClient client = new GraphServiceClient(credential, ".default");
+            var requestAdapter = client.getRequestAdapter();
+            // null request body
+            String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
+
+            // empty request body
+            Message testMsg = new Message();
+            Message newMessage = client.users().byUserId(USER_ID).messages().post(testMsg);
+            System.out.println("Successful post! Id=" + newMessage.getId());
+
+            // normal JSON request body
+            var patchMessage = new Message();
+            patchMessage.setSubject("ANOTHER SUBJECT!");
+            var updatedMessage = client.users().byUserId(USER_ID).messages().byMessageId(newMessage.getId()).patch(patchMessage);
+            System.out.println("Successful patch! Id=" + updatedMessage.getId() + ", subject=" + updatedMessage.getSubject());
+
+            // stream request body: upload small file
+            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/hello-world.txt");
+            InputStream fileStream = new FileInputStream(file);
+            DriveItem uploadedFile = client.drives()
+                    .byDriveId(myDriveId)
+                    .items()
+                    .byDriveItemId("root:/test/hello-world-test.txt:")
+                    .content()
+                    .put(fileStream);
+
+            System.out.println("Uploaded file: " + uploadedFile.getName() + " with size: " + uploadedFile.getSize());
+
+        } catch (Exception ex) {
+            System.out.println(ex.getMessage());
+        }
+
+    }
+
+    @Test
+    void testLFUToOutlook() {
+        try {
+            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/test2mbupload.txt");
+            InputStream fileStream = new FileInputStream(file);
+            long streamSize = file.length();
+            String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
+            fileStream = new FileInputStream(file);
+
+            TokenCredential credential = new ClientSecretCredentialBuilder()
+                .clientId(System.getenv("kiota_client_id"))
+                .clientSecret(System.getenv("kiota_client_secret"))
+                .tenantId(System.getenv("kiota_tenant_id"))
+                .build();
+            GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+            // create draft message
+            Message draft = new Message();
+            draft.setSubject("Test LFU");
+
+            Message createdMessage = client.users().byUserId(USER_ID).messages().post(draft);
+
+            // create upload session
+            com.microsoft.graph.users.item.messages.item.attachments.createuploadsession.CreateUploadSessionPostRequestBody uploadSessionPostRequestBody = new com.microsoft.graph.users.item.messages.item.attachments.createuploadsession.CreateUploadSessionPostRequestBody();
+            AttachmentItem attachmentItem = new AttachmentItem();
+            attachmentItem.setAttachmentType(AttachmentType.File);
+            attachmentItem.setName("Test LFU");
+            attachmentItem.setSize(streamSize);
+            uploadSessionPostRequestBody.setAttachmentItem(attachmentItem);
+
+            UploadSession uploadSession = client.users().byUserId(USER_ID).messages().byMessageId(createdMessage.getId()).attachments().createUploadSession().post(uploadSessionPostRequestBody);
+
+            int maxSliceSize = 409600;
+            LargeFileUploadTask<AttachmentItem> largeFileUploadTask = new LargeFileUploadTask<>(
+                    client.getRequestAdapter(),
+                    uploadSession,
+                    fileStream,
+                    streamSize,
+                    maxSliceSize,
+                    AttachmentItem::createFromDiscriminatorValue);
+
+            int maxAttempts = 5;
+            // Create a callback used by the upload provider
+            IProgressCallback callback = (current, max) -> System.out.println(
+                        String.format("Uploaded %d bytes of %d total bytes", current, max));
+
+            // Do the upload
+            UploadResult<AttachmentItem> uploadResult = largeFileUploadTask.upload(maxAttempts, callback);
+            if (uploadResult.isUploadSuccessful()) {
+                System.out.println("Upload complete");
+                System.out.println("Attachment Location: " + uploadResult.location);
+            } else {
+                System.out.println("Upload failed");
+            }
+
+            // Download attachment and validate with checksum
+            String[] splitLocationUrl = uploadResult.location.getPath().split("/", 0);
+            String attachmentId = splitLocationUrl[splitLocationUrl.length - 1].split("'")[1];
+
+            Attachment mailAttachment = client.users().byUserId(USER_ID).messages().byMessageId(createdMessage.getId()).attachments().byAttachmentId(attachmentId).get();
+
+            RequestInformation requestInformation = client.users().byUserId(USER_ID).messages().byMessageId(createdMessage.getId()).attachments().byAttachmentId(attachmentId).toGetRequestInformation();
+
+            requestInformation.setUri(new URI(requestInformation.getUri().toString() + "/$value"));
+            InputStream downloadedFile = client.getRequestAdapter().sendPrimitive(requestInformation, null, InputStream.class);
+
+            assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
+
+        } catch (Exception exception) {
+            System.out.println(exception.getMessage());
+        }
+    }
+
 
     @Test
     void testLargeFileUploadToOneDrive() {
         try {
-            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/openapi.yaml");
+            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/test2mbupload.txt");
             InputStream fileStream = new FileInputStream(file);
             long streamSize = file.length();
+            String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
+            fileStream = new FileInputStream(file);
 
             TokenCredential credential = new ClientSecretCredentialBuilder()
                 .clientId(System.getenv("kiota_client_id"))
@@ -83,11 +209,11 @@ class AppTest {
             UploadSession uploadSession = client.drives()
                     .byDriveId(myDriveId)
                     .items()
-                    .byDriveItemId("root:/test/:")
+                    .byDriveItemId("root:/test/test2mbupload.txt:")
                     .createUploadSession()
                     .post(uploadSessionRequest);
 
-            int maxSliceSize = 320 * 10;
+            int maxSliceSize = 409600;
             LargeFileUploadTask<DriveItem> largeFileUploadTask = new LargeFileUploadTask<>(
                     client.getRequestAdapter(),
                     uploadSession,
@@ -109,6 +235,98 @@ class AppTest {
             } else {
                 System.out.println("Upload failed");
             }
+
+            DriveItem uploadedFile = client.drives()
+                    .byDriveId(myDriveId)
+                    .items()
+                    .byDriveItemId(uploadResult.itemResponse.getId())
+                    .get();
+
+            assertEquals(streamSize, uploadedFile.getSize());
+
+            InputStream downloadedFile = client.drives()
+                    .byDriveId(myDriveId)
+                    .items()
+                    .byDriveItemId(uploadResult.itemResponse.getId())
+                    .content()
+                    .get();
+
+            assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
+
+        } catch (Exception exception) {
+            System.out.println(exception.getMessage());
+        }
+    }
+
+    @Test
+    void testLFUToOneDriveWithDeferCommitTrue()
+    {
+        try {
+            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/testlightupload.txt");
+            InputStream fileStream = new FileInputStream(file);
+            long streamSize = file.length();
+            String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
+            fileStream = new FileInputStream(file);
+
+            TokenCredential credential = new ClientSecretCredentialBuilder()
+                .clientId(System.getenv("kiota_client_id"))
+                .clientSecret(System.getenv("kiota_client_secret"))
+                .tenantId(System.getenv("kiota_tenant_id"))
+                .build();
+
+            CreateUploadSessionPostRequestBody uploadSessionRequest = new CreateUploadSessionPostRequestBody();
+            DriveItemUploadableProperties properties = new DriveItemUploadableProperties();
+            properties.getAdditionalData().put("@microsoft.graph.conflictBehavior", "replace");
+            uploadSessionRequest.setItem(properties);
+            uploadSessionRequest.getAdditionalData().put("deferCommit", true);
+
+            GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+            String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
+            UploadSession uploadSession = client.drives()
+                    .byDriveId(myDriveId)
+                    .items()
+                    .byDriveItemId("root:/test/testDeferCommitFalse.txt:")
+                    .createUploadSession()
+                    .post(uploadSessionRequest);
+
+            int maxSliceSize = 409600;
+            LargeFileUploadTask<DriveItem> largeFileUploadTask = new LargeFileUploadTask<>(
+                    client.getRequestAdapter(),
+                    uploadSession,
+                    fileStream,
+                    streamSize,
+                    maxSliceSize,
+                    DriveItem::createFromDiscriminatorValue);
+
+            int maxAttempts = 5;
+            // Create a callback used by the upload provider
+            IProgressCallback callback = (current, max) -> System.out.println(
+                        String.format("Uploaded %d bytes of %d total bytes", current, max));
+
+            // Do the upload
+            UploadResult<DriveItem> uploadResult = largeFileUploadTask.upload(maxAttempts, callback);
+            if (uploadResult.isUploadSuccessful()) {
+                System.out.println("Upload complete");
+            } else {
+                System.out.println("Upload failed");
+            }
+
+            RequestInformation requestInformation = new RequestInformation(HttpMethod.POST, uploadSession.getUploadUrl(), new HashMap<String, Object>());
+            requestInformation.headers.add("Content-Length", "0");
+
+            DriveItem completedUpload = client.getRequestAdapter().send(requestInformation, null, DriveItem::createFromDiscriminatorValue);
+
+            assertEquals(streamSize, completedUpload.getSize());
+
+            InputStream downloadedFile = client.drives()
+                    .byDriveId(myDriveId)
+                    .items()
+                    .byDriveItemId(completedUpload.getId())
+                    .content()
+                    .get();
+
+            assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
 
         } catch (Exception exception) {
             System.out.println(exception.getMessage());
