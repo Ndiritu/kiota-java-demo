@@ -4,6 +4,8 @@
 package kiota.java.demo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -11,12 +13,16 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.codec.digest.DigestUtils;
 import org.junit.jupiter.api.Test;
 
 import com.azure.core.credential.TokenCredential;
+import com.azure.identity.ClientCertificateCredentialBuilder;
 import com.azure.identity.ClientSecretCredentialBuilder;
 import com.google.gson.JsonParser;
 import com.microsoft.graph.core.content.BatchRequestContent;
@@ -30,18 +36,31 @@ import com.microsoft.graph.drives.item.items.item.createuploadsession.CreateUplo
 import com.microsoft.graph.models.Attachment;
 import com.microsoft.graph.models.AttachmentItem;
 import com.microsoft.graph.models.AttachmentType;
+import com.microsoft.graph.models.BaseCollectionPaginationCountResponse;
 import com.microsoft.graph.models.DriveItem;
 import com.microsoft.graph.models.DriveItemUploadableProperties;
+import com.microsoft.graph.models.Entity;
+import com.microsoft.graph.models.EventCollectionResponse;
+import com.microsoft.graph.models.Group;
+import com.microsoft.graph.models.GroupCollectionResponse;
 import com.microsoft.graph.models.Message;
 import com.microsoft.graph.models.MessageCollectionResponse;
+import com.microsoft.graph.models.Onenote;
+import com.microsoft.graph.models.OnenotePage;
 import com.microsoft.graph.models.PlannerAssignments;
+import com.microsoft.graph.models.Team;
 import com.microsoft.graph.models.UploadSession;
 import com.microsoft.graph.models.User;
+import com.microsoft.graph.models.WorkbookRange;
 import com.microsoft.graph.models.odataerrors.ODataError;
 import com.microsoft.graph.serviceclient.GraphServiceClient;
 import com.microsoft.kiota.ApiException;
 import com.microsoft.kiota.HttpMethod;
 import com.microsoft.kiota.RequestInformation;
+import com.microsoft.kiota.serialization.KiotaJsonSerialization;
+import com.microsoft.kiota.serialization.UntypedArray;
+import com.microsoft.kiota.serialization.UntypedDouble;
+import com.microsoft.kiota.serialization.UntypedNode;
 import com.microsoft.graph.core.authentication.AzureIdentityAuthenticationProvider;
 
 // import okhttp3.Call;
@@ -54,6 +73,7 @@ import com.microsoft.graph.core.authentication.AzureIdentityAuthenticationProvid
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.io.InputStream;
 import java.io.FileInputStream;
@@ -66,273 +86,548 @@ class AppTest {
 
     final String USER_ID = "pgichuhi@sk7xg.onmicrosoft.com";
 
-    @Test
-    void testContentLengthFixes() {
-        try {
-            TokenCredential credential = new ClientSecretCredentialBuilder()
-                .clientId(System.getenv("kiota_client_id"))
-                .clientSecret(System.getenv("kiota_client_secret"))
-                .tenantId(System.getenv("kiota_tenant_id"))
-                .build();
+    // @Test
+    // void certBasedAuthentication() {
+    //     TokenCredential credential = new ClientCertificateCredentialBuilder()
+    //                     .tenantId(System.getenv("kiota_tenant_id"))
+    //                     .clientId(System.getenv("kiota_client_id"))
+    //                     .pemCertificate("/home/ndiritu/new-certs/cert-with-private-key.pem")
+    //                     .build();
 
-            GraphServiceClient client = new GraphServiceClient(credential, ".default");
-            var requestAdapter = client.getRequestAdapter();
-            // null request body
-            String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
-
-            // empty request body
-            Message testMsg = new Message();
-            Message newMessage = client.users().byUserId(USER_ID).messages().post(testMsg);
-            System.out.println("Successful post! Id=" + newMessage.getId());
-
-            // normal JSON request body
-            var patchMessage = new Message();
-            patchMessage.setSubject("ANOTHER SUBJECT!");
-            var updatedMessage = client.users().byUserId(USER_ID).messages().byMessageId(newMessage.getId()).patch(patchMessage);
-            System.out.println("Successful patch! Id=" + updatedMessage.getId() + ", subject=" + updatedMessage.getSubject());
-
-            // stream request body: upload small file
-            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/hello-world.txt");
-            InputStream fileStream = new FileInputStream(file);
-            DriveItem uploadedFile = client.drives()
-                    .byDriveId(myDriveId)
-                    .items()
-                    .byDriveItemId("root:/test/hello-world-test.txt:")
-                    .content()
-                    .put(fileStream);
-
-            System.out.println("Uploaded file: " + uploadedFile.getName() + " with size: " + uploadedFile.getSize());
-
-        } catch (Exception ex) {
-            System.out.println(ex.getMessage());
-        }
-
-    }
+    //     GraphServiceClient client = new GraphServiceClient(credential, ".default");
+    //     User user = client.users().byUserId(USER_ID).get();
+    //     System.out.println("User: " + user.getDisplayName());
+    // }
 
     @Test
-    void testLFUToOutlook() {
-        try {
-            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/test2mbupload.txt");
-            InputStream fileStream = new FileInputStream(file);
-            long streamSize = file.length();
-            String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
-            fileStream = new FileInputStream(file);
-
-            TokenCredential credential = new ClientSecretCredentialBuilder()
-                .clientId(System.getenv("kiota_client_id"))
-                .clientSecret(System.getenv("kiota_client_secret"))
-                .tenantId(System.getenv("kiota_tenant_id"))
-                .build();
-            GraphServiceClient client = new GraphServiceClient(credential, ".default");
-
-            // create draft message
-            Message draft = new Message();
-            draft.setSubject("Test LFU");
-
-            Message createdMessage = client.users().byUserId(USER_ID).messages().post(draft);
-
-            // create upload session
-            com.microsoft.graph.users.item.messages.item.attachments.createuploadsession.CreateUploadSessionPostRequestBody uploadSessionPostRequestBody = new com.microsoft.graph.users.item.messages.item.attachments.createuploadsession.CreateUploadSessionPostRequestBody();
-            AttachmentItem attachmentItem = new AttachmentItem();
-            attachmentItem.setAttachmentType(AttachmentType.File);
-            attachmentItem.setName("Test LFU");
-            attachmentItem.setSize(streamSize);
-            uploadSessionPostRequestBody.setAttachmentItem(attachmentItem);
-
-            UploadSession uploadSession = client.users().byUserId(USER_ID).messages().byMessageId(createdMessage.getId()).attachments().createUploadSession().post(uploadSessionPostRequestBody);
-
-            int maxSliceSize = 409600;
-            LargeFileUploadTask<AttachmentItem> largeFileUploadTask = new LargeFileUploadTask<>(
-                    client.getRequestAdapter(),
-                    uploadSession,
-                    fileStream,
-                    streamSize,
-                    maxSliceSize,
-                    AttachmentItem::createFromDiscriminatorValue);
-
-            int maxAttempts = 5;
-            // Create a callback used by the upload provider
-            IProgressCallback callback = (current, max) -> System.out.println(
-                        String.format("Uploaded %d bytes of %d total bytes", current, max));
-
-            // Do the upload
-            UploadResult<AttachmentItem> uploadResult = largeFileUploadTask.upload(maxAttempts, callback);
-            if (uploadResult.isUploadSuccessful()) {
-                System.out.println("Upload complete");
-                System.out.println("Attachment Location: " + uploadResult.location);
-            } else {
-                System.out.println("Upload failed");
-            }
-
-            // Download attachment and validate with checksum
-            String[] splitLocationUrl = uploadResult.location.getPath().split("/", 0);
-            String attachmentId = splitLocationUrl[splitLocationUrl.length - 1].split("'")[1];
-
-            Attachment mailAttachment = client.users().byUserId(USER_ID).messages().byMessageId(createdMessage.getId()).attachments().byAttachmentId(attachmentId).get();
-
-            RequestInformation requestInformation = client.users().byUserId(USER_ID).messages().byMessageId(createdMessage.getId()).attachments().byAttachmentId(attachmentId).toGetRequestInformation();
-
-            requestInformation.setUri(new URI(requestInformation.getUri().toString() + "/$value"));
-            InputStream downloadedFile = client.getRequestAdapter().sendPrimitive(requestInformation, null, InputStream.class);
-
-            assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
-
-        } catch (Exception exception) {
-            System.out.println(exception.getMessage());
-        }
-    }
-
-
-    @Test
-    void testLargeFileUploadToOneDrive() {
-        try {
-            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/test2mbupload.txt");
-            InputStream fileStream = new FileInputStream(file);
-            long streamSize = file.length();
-            String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
-            fileStream = new FileInputStream(file);
-
-            TokenCredential credential = new ClientSecretCredentialBuilder()
-                .clientId(System.getenv("kiota_client_id"))
-                .clientSecret(System.getenv("kiota_client_secret"))
-                .tenantId(System.getenv("kiota_tenant_id"))
-                .build();
-
-            CreateUploadSessionPostRequestBody uploadSessionRequest = new CreateUploadSessionPostRequestBody();
-            DriveItemUploadableProperties properties = new DriveItemUploadableProperties();
-            properties.getAdditionalData().put("@microsoft.graph.conflictBehavior", "replace");
-            uploadSessionRequest.setItem(properties);
-
-            GraphServiceClient client = new GraphServiceClient(credential, ".default");
-
-            String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
-            UploadSession uploadSession = client.drives()
-                    .byDriveId(myDriveId)
-                    .items()
-                    .byDriveItemId("root:/test/test2mbupload.txt:")
-                    .createUploadSession()
-                    .post(uploadSessionRequest);
-
-            int maxSliceSize = 409600;
-            LargeFileUploadTask<DriveItem> largeFileUploadTask = new LargeFileUploadTask<>(
-                    client.getRequestAdapter(),
-                    uploadSession,
-                    fileStream,
-                    streamSize,
-                    maxSliceSize,
-                    DriveItem::createFromDiscriminatorValue);
-
-            int maxAttempts = 5;
-            // Create a callback used by the upload provider
-            IProgressCallback callback = (current, max) -> System.out.println(
-                        String.format("Uploaded %d bytes of %d total bytes", current, max));
-
-            // Do the upload
-            UploadResult<DriveItem> uploadResult = largeFileUploadTask.upload(maxAttempts, callback);
-            if (uploadResult.isUploadSuccessful()) {
-                System.out.println("Upload complete");
-                System.out.println("Item ID: " + uploadResult.itemResponse.getId());
-            } else {
-                System.out.println("Upload failed");
-            }
-
-            DriveItem uploadedFile = client.drives()
-                    .byDriveId(myDriveId)
-                    .items()
-                    .byDriveItemId(uploadResult.itemResponse.getId())
-                    .get();
-
-            assertEquals(streamSize, uploadedFile.getSize());
-
-            InputStream downloadedFile = client.drives()
-                    .byDriveId(myDriveId)
-                    .items()
-                    .byDriveItemId(uploadResult.itemResponse.getId())
-                    .content()
-                    .get();
-
-            assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
-
-        } catch (Exception exception) {
-            System.out.println(exception.getMessage());
-        }
-    }
-
-    @Test
-    void testLFUToOneDriveWithDeferCommitTrue()
+    void infiniteLoop() throws ReflectiveOperationException
     {
-        try {
-            File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/testlightupload.txt");
-            InputStream fileStream = new FileInputStream(file);
-            long streamSize = file.length();
-            String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
-            fileStream = new FileInputStream(file);
+        TokenCredential credential = new ClientSecretCredentialBuilder()
+                    .clientId(System.getenv("kiota_client_id"))
+                    .clientSecret(System.getenv("kiota_client_secret"))
+                    .tenantId(System.getenv("kiota_tenant_id"))
+                    .build();
 
-            TokenCredential credential = new ClientSecretCredentialBuilder()
-                .clientId(System.getenv("kiota_client_id"))
-                .clientSecret(System.getenv("kiota_client_secret"))
-                .tenantId(System.getenv("kiota_tenant_id"))
-                .build();
+        GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
 
-            CreateUploadSessionPostRequestBody uploadSessionRequest = new CreateUploadSessionPostRequestBody();
-            DriveItemUploadableProperties properties = new DriveItemUploadableProperties();
-            properties.getAdditionalData().put("@microsoft.graph.conflictBehavior", "replace");
-            uploadSessionRequest.setItem(properties);
-            uploadSessionRequest.getAdditionalData().put("deferCommit", true);
+        // var groupId = "0058f9a0-005a-4e20-b875-4878c99e4f44";
 
-            GraphServiceClient client = new GraphServiceClient(credential, ".default");
+        // Group group = graphClient.groups().byGroupId(groupId).get(
+        //     requestConfig -> requestConfig.queryParameters.select = new String[]{"id", "displayName", "resourceProvisioningOptions"}
+        // );
 
-            String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
-            UploadSession uploadSession = client.drives()
-                    .byDriveId(myDriveId)
-                    .items()
-                    .byDriveItemId("root:/test/testDeferCommitFalse.txt:")
-                    .createUploadSession()
-                    .post(uploadSessionRequest);
+        // Team team = graphClient.teams().byTeamId(groupId).get();
 
-            int maxSliceSize = 409600;
-            LargeFileUploadTask<DriveItem> largeFileUploadTask = new LargeFileUploadTask<>(
-                    client.getRequestAdapter(),
-                    uploadSession,
-                    fileStream,
-                    streamSize,
-                    maxSliceSize,
-                    DriveItem::createFromDiscriminatorValue);
+        // group.setTeam(team);
 
-            int maxAttempts = 5;
-            // Create a callback used by the upload provider
-            IProgressCallback callback = (current, max) -> System.out.println(
-                        String.format("Uploaded %d bytes of %d total bytes", current, max));
+        // System.out.println("Group id=" + group.getId() + ", name=" + group.getDisplayName());
 
-            // Do the upload
-            UploadResult<DriveItem> uploadResult = largeFileUploadTask.upload(maxAttempts, callback);
-            if (uploadResult.isUploadSuccessful()) {
-                System.out.println("Upload complete");
-            } else {
-                System.out.println("Upload failed");
-            }
 
-            RequestInformation requestInformation = new RequestInformation(HttpMethod.POST, uploadSession.getUploadUrl(), new HashMap<String, Object>());
-            requestInformation.headers.add("Content-Length", "0");
+        GroupCollectionResponse groupCollectionResponse = graphClient.groups().get(
+                requestConfig -> requestConfig.queryParameters.select = new String[]{"id", "displayName", "resourceProvisioningOptions"});
 
-            DriveItem completedUpload = client.getRequestAdapter().send(requestInformation, null, DriveItem::createFromDiscriminatorValue);
+        List<Group> groups = groupCollectionResponse.getValue();
+        // List<Group> groups = new ArrayList<>();
 
-            assertEquals(streamSize, completedUpload.getSize());
+        // PageIterator<Group, BaseCollectionPaginationCountResponse> pageIterator =
+        //         new PageIterator.Builder<Group, BaseCollectionPaginationCountResponse>()
+        //                 .client(graphClient)
+        //                 .collectionPage(Objects.requireNonNull(groupCollectionResponse))
+        //                 .collectionPageFactory(GroupCollectionResponse::createFromDiscriminatorValue)
+        //                 .requestConfigurator(requestInfo ->
+        //                 {
+        //                     requestInfo.addQueryParameter("%24select", new String[]{"id", "displayName", "resourceProvisioningOptions"});
+        //                     return requestInfo;
+        //                 })
+        //                 .processPageItemCallback(groups::add)
+        //                 .build();
 
-            InputStream downloadedFile = client.drives()
-                    .byDriveId(myDriveId)
-                    .items()
-                    .byDriveItemId(completedUpload.getId())
-                    .content()
-                    .get();
+        // pageIterator.iterate();
 
-            assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
+        var group = groups.get(0);
+        Team team = graphClient.teams().byTeamId(group.getId()).get();
+        group.setTeam(team);
 
-        } catch (Exception exception) {
-            System.out.println(exception.getMessage());
-        }
+        System.out.println("Group id=" + group.getId() + ", name=" + group.getDisplayName());
+
+
+        // for (Group group : groups)
+        // {
+        //     if (isTeam(group)) {
+        //         Team team = graphClient.teams().byTeamId(group.getId()).get();
+        //         group.setTeam(team);
+        //     }
+        // }
     }
 
+    public boolean isTeam(Group group)
+    {
+        Objects.requireNonNull(group);
+        Objects.requireNonNull(group.getAdditionalData());
+
+        return getAdditionalDataStringList(group, "resourceProvisioningOptions").contains("Team");
+    }
+
+    List<String> getAdditionalDataStringList(Entity entity, String key)
+    {
+        if (entity == null
+            || key == null
+            || key.isEmpty()
+            || !entity.getAdditionalData().containsKey(key))
+            return Collections.emptyList();
+
+        List<String> result = new ArrayList<>();
+
+        UntypedArray untypedArray = (UntypedArray) entity.getAdditionalData().get("resourceProvisioningOptions");
+        for (UntypedNode untypedNode : untypedArray.getValue())
+        {
+            if (untypedNode.getValue() == null)
+                continue;
+
+            result.add(untypedNode.getValue().toString());
+        }
+
+        return result;
+    }
+
+    // @Test
+    // void testGetWorkSheetCellValue() {
+    //     try {
+    //         TokenCredential credential = new ClientSecretCredentialBuilder()
+    //             .clientId(System.getenv("kiota_client_id"))
+    //             .clientSecret(System.getenv("kiota_client_secret"))
+    //             .tenantId(System.getenv("kiota_tenant_id"))
+    //             .build();
+
+    //         GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+    //         String driveId = "b!snvSw7NE8EeDp1CLO07dj3632uZ9FZhDi6IfbdhpPZBtcVvavuhNRYPmoTYXKS5e";
+
+    //         // Drive root children
+    //         List<DriveItem> rootItems = client.drives().byDriveId(driveId).items().byDriveItemId("root").children().get().getValue();
+
+    //         // Get the workbook
+    //         WorkbookRange workbook = client.drives().byDriveId(driveId).items().byDriveItemId("01TFQELTITLHSGZMCUL5GJ7ECBLDMHI53C").workbook().worksheets().byWorkbookWorksheetId("Sheet1").cellWithRowWithColumn(0, 0).get();
+
+    //         if (workbook.getValues() != null) {
+    //             String jsonString = KiotaJsonSerialization.serializeAsString(workbook.getValues());
+    //             System.out.println("Json string: " + jsonString);
+    //             // UntypedArray untypedValues = (UntypedArray) workbook.getValues();
+    //             // java.util.List<UntypedNode> cellValuesList = (java.util.List<UntypedNode>) untypedValues.getValue();
+    //             // UntypedArray untypedFirstCellValue = (UntypedArray) cellValuesList.get(0);
+    //             // java.util.List<UntypedNode> cellValues = (java.util.List<UntypedNode>) untypedFirstCellValue.getValue();
+    //             // Double cellValue = ((UntypedDouble) cellValues.get(0)).getValue();
+    //             // System.out.println("Cell value: " + cellValue.toString());
+    //         }
+
+    //     } catch (Exception ex) {
+    //         System.out.println(ex.getMessage());
+    //     }
+    // }
+
+    // @Test
+    // void testMultipart() {
+    //     try {
+    //         TokenCredential credential = new ClientSecretCredentialBuilder()
+    //             .clientId(System.getenv("kiota_client_id"))
+    //             .clientSecret(System.getenv("kiota_client_secret"))
+    //             .tenantId(System.getenv("kiota_tenant_id"))
+    //             .build();
+
+    //         GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+    //         String content = "--MyPartBoundary198374\r\n" + //
+    //         "Content-Disposition:form-data; name=\"Presentation\"\r\n" + //
+    //         "Content-Type:text/html\r\n" + //
+    //         "\r\n" + //
+    //         "<!DOCTYPE html>\r\n" + //
+    //         "<html>\r\n" + //
+    //         "  <head>\r\n" + //
+    //         "    <title>A page with <i>rendered</i> images and an <b>attached</b> file</title>\r\n" + //
+    //         "    <meta name=\"created\" content=\"2015-07-22T09:00:00-08:00\" />\r\n" + //
+    //         "  </head>\r\n" + //
+    //         "  <body>\r\n" + //
+    //         "    <p>Here's an image from an online source:</p>\r\n" + //
+    //         "    <img src=\"https://...\" alt=\"an image on the page\" width=\"500\" />\r\n" + //
+    //         "    <p>Here's an image uploaded as binary data:</p>\r\n" + //
+    //         "    <img src=\"name:imageBlock1\" alt=\"an image on the page\" width=\"300\" />\r\n" + //
+    //         "    <p>Here's a file attachment:</p>\r\n" + //
+    //         "    <object data-attachment=\"FileName.pdf\" data=\"name:fileBlock1\" type=\"application/pdf\" />\r\n" + //
+    //         "  </body>\r\n" + //
+    //         "</html>\r\n" + //
+    //         "\r\n" + //
+    //         "--MyPartBoundary198374\r\n" + //
+    //         "Content-Disposition:form-data; name=\"imageBlock1\"\r\n" + //
+    //         "Content-Type:image/jpeg\r\n" + //
+    //         "\r\n" + //
+    //         "... binary image data ...\r\n" + //
+    //         "\r\n" + //
+    //         "--MyPartBoundary198374\r\n" + //
+    //         "Content-Disposition:form-data; name=\"fileBlock1\"\r\n" + //
+    //         "Content-Type:application/pdf\r\n" + //
+    //         "\r\n" + //
+    //         "... binary file data ...\r\n" + //
+    //         "\r\n" + //
+    //         "--MyPartBoundary198374--";
+    //         OnenotePage body = new OnenotePage();
+    //         body.setContent(content.getBytes());
+    //         OnenotePage response = client.users().byUserId(USER_ID).onenote().pages().post(body);
+    //         System.out.println("Page created! Id=" + response.getId());
+
+    //     } catch (Exception ex) {
+    //         System.out.println(ex.getMessage());
+    //     }
+    // }
+
+    // @Test
+    // void testContentLengthFixes() {
+    //     try {
+    //         TokenCredential credential = new ClientSecretCredentialBuilder()
+    //             .clientId(System.getenv("kiota_client_id"))
+    //             .clientSecret(System.getenv("kiota_client_secret"))
+    //             .tenantId(System.getenv("kiota_tenant_id"))
+    //             .build();
+
+    //         GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+    //         // null/no request body
+    //         String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
+
+    //         // empty request body
+    //         Message testMsg = new Message();
+    //         Message newMessage = client.users().byUserId(USER_ID).messages().post(testMsg);
+    //         System.out.println("Successful post! Id=" + newMessage.getId());
+
+    //         // normal JSON request body
+    //         var patchMessage = new Message();
+    //         patchMessage.setSubject("ANOTHER SUBJECT!");
+    //         var updatedMessage = client.users().byUserId(USER_ID).messages().byMessageId(newMessage.getId()).patch(patchMessage);
+    //         System.out.println("Successful patch! Id=" + updatedMessage.getId() + ", subject=" + updatedMessage.getSubject());
+
+    //         // stream request body: upload small file
+    //         File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/hello-world.txt");
+    //         InputStream fileStream = new FileInputStream(file);
+    //         DriveItem uploadedFile = client.drives()
+    //                 .byDriveId(myDriveId)
+    //                 .items()
+    //                 .byDriveItemId("root:/test/hello-world-test.txt:")
+    //                 .content()
+    //                 .put(fileStream);
+
+    //         System.out.println("Uploaded file: " + uploadedFile.getName() + " with size: " + uploadedFile.getSize());
+
+    //     } catch (Exception ex) {
+    //         System.out.println(ex.getMessage());
+    //     }
+
+    // }
+
+    // @Test
+    // void testLFUToOutlook() {
+    //     try {
+    //         // Read file
+    //         File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/test2mbupload.txt");
+    //         InputStream fileStream = new FileInputStream(file);
+    //         long streamSize = file.length();
+
+    //         // Calculate checksum
+    //         String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
+    //         fileStream = new FileInputStream(file);
+
+    //         TokenCredential credential = new ClientSecretCredentialBuilder()
+    //             .clientId(System.getenv("kiota_client_id"))
+    //             .clientSecret(System.getenv("kiota_client_secret"))
+    //             .tenantId(System.getenv("kiota_tenant_id"))
+    //             .build();
+    //         GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+    //         // create new draft message
+    //         Message draft = new Message();
+    //         draft.setSubject("Test LFU");
+
+    //         Message createdMessage = client.users().byUserId(USER_ID).messages().post(draft);
+
+    //         // create upload session
+    //         com.microsoft.graph.users.item.messages.item.attachments.createuploadsession.CreateUploadSessionPostRequestBody uploadSessionPostRequestBody = new com.microsoft.graph.users.item.messages.item.attachments.createuploadsession.CreateUploadSessionPostRequestBody();
+    //         AttachmentItem attachmentItem = new AttachmentItem();
+    //         attachmentItem.setAttachmentType(AttachmentType.File);
+    //         attachmentItem.setName("Test LFU");
+    //         attachmentItem.setSize(streamSize);
+    //         uploadSessionPostRequestBody.setAttachmentItem(attachmentItem);
+
+    //         UploadSession uploadSession = client.users().byUserId(USER_ID).messages().byMessageId(createdMessage.getId()).attachments().createUploadSession().post(uploadSessionPostRequestBody);
+
+    //         int maxSliceSize = 409600;
+    //         LargeFileUploadTask<AttachmentItem> largeFileUploadTask = new LargeFileUploadTask<>(
+    //                 client.getRequestAdapter(),
+    //                 uploadSession,
+    //                 fileStream,
+    //                 streamSize,
+    //                 maxSliceSize,
+    //                 AttachmentItem::createFromDiscriminatorValue);
+
+    //         int maxAttempts = 5;
+
+    //         // Create a callback used by the upload provider
+    //         IProgressCallback callback = (current, max) -> System.out.println(
+    //                     String.format("Uploaded %d bytes of %d total bytes", current, max));
+
+    //         // Do the upload
+    //         UploadResult<AttachmentItem> uploadResult = largeFileUploadTask.upload(maxAttempts, callback);
+    //         if (uploadResult.isUploadSuccessful()) {
+    //             System.out.println("Upload complete");
+    //             // Print upload location from response header
+    //             System.out.println("Attachment Location: " + uploadResult.location);
+    //         } else {
+    //             System.out.println("Upload failed");
+    //         }
+
+    //         // Get attachment ID from returned Location header value
+    //         String[] splitLocationUrl = uploadResult.location.getPath().split("/", 0);
+    //         String attachmentId = splitLocationUrl[splitLocationUrl.length - 1].split("'")[1];
+
+    //         // Download attachment and validate with checksum
+    //         RequestInformation requestInformation = client.users().byUserId(USER_ID).messages().byMessageId(createdMessage.getId()).attachments().byAttachmentId(attachmentId).toGetRequestInformation();
+    //         requestInformation.setUri(new URI(requestInformation.getUri().toString() + "/$value"));
+    //         InputStream downloadedFile = client.getRequestAdapter().sendPrimitive(requestInformation, null, InputStream.class);
+
+    //         assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
+
+    //     } catch (Exception exception) {
+    //         System.out.println(exception.getMessage());
+    //     }
+    // }
+
+
+    // @Test
+    // void testLargeFileUploadToOneDrive() {
+    //     try {
+    //         // Read file
+    //         File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/testWorkbook.xlsx");
+    //         InputStream fileStream = new FileInputStream(file);
+    //         long streamSize = file.length();
+
+    //         // Calculate checksum before upload
+    //         String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
+    //         fileStream = new FileInputStream(file);
+
+    //         TokenCredential credential = new ClientSecretCredentialBuilder()
+    //             .clientId(System.getenv("kiota_client_id"))
+    //             .clientSecret(System.getenv("kiota_client_secret"))
+    //             .tenantId(System.getenv("kiota_tenant_id"))
+    //             .build();
+
+    //         CreateUploadSessionPostRequestBody uploadSessionRequest = new CreateUploadSessionPostRequestBody();
+    //         DriveItemUploadableProperties properties = new DriveItemUploadableProperties();
+    //         properties.getAdditionalData().put("@microsoft.graph.conflictBehavior", "replace");
+    //         uploadSessionRequest.setItem(properties);
+
+    //         GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+    //         // Fetch root drive ID
+    //         String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
+
+    //         assertTrue(false);
+
+    //         // Create upload session
+    //         UploadSession uploadSession = client.drives()
+    //                 .byDriveId(myDriveId)
+    //                 .items()
+    //                 .byDriveItemId("root:/test/testWorkbook.xlsx:")
+    //                 .createUploadSession()
+    //                 .post(uploadSessionRequest);
+
+    //         int maxSliceSize = 409600;
+    //         LargeFileUploadTask<DriveItem> largeFileUploadTask = new LargeFileUploadTask<>(
+    //                 client.getRequestAdapter(),
+    //                 uploadSession,
+    //                 fileStream,
+    //                 streamSize,
+    //                 maxSliceSize,
+    //                 DriveItem::createFromDiscriminatorValue);
+
+    //         int maxAttempts = 5;
+    //         // Create a callback used by the upload provider
+    //         IProgressCallback callback = (current, max) -> System.out.println(
+    //                     String.format("Uploaded %d bytes of %d total bytes", current, max));
+
+    //         // Do the upload
+    //         UploadResult<DriveItem> uploadResult = largeFileUploadTask.upload(maxAttempts, callback);
+    //         if (uploadResult.isUploadSuccessful()) {
+    //             System.out.println("Upload complete");
+    //             System.out.println("Item ID: " + uploadResult.itemResponse.getId());
+    //         } else {
+    //             System.out.println("Upload failed");
+    //         }
+
+    //         // Use the drive item ID in the uploadResult to fetch the uploaded file
+    //         DriveItem uploadedFile = client.drives()
+    //                 .byDriveId(myDriveId)
+    //                 .items()
+    //                 .byDriveItemId(uploadResult.itemResponse.getId())
+    //                 .get();
+
+    //         assertEquals(streamSize, uploadedFile.getSize());
+
+    //         InputStream downloadedFile = client.drives()
+    //                 .byDriveId(myDriveId)
+    //                 .items()
+    //                 .byDriveItemId(uploadResult.itemResponse.getId())
+    //                 .content()
+    //                 .get();
+
+    //         assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
+    //         System.out.println("Hello world!");
+
+
+    //     } catch (Exception exception) {
+    //         System.out.println(exception.getMessage());
+    //     }
+    // }
+
+    // @Test
+    // void testLFUToOneDriveWithDeferCommitTrue()
+    // {
+    //     try {
+    //         // Read file
+    //         File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/testlightupload.txt");
+    //         InputStream fileStream = new FileInputStream(file);
+    //         long streamSize = file.length();
+
+    //         // Calculate checksum before upload
+    //         String uploadFileChecksum = DigestUtils.md5Hex(fileStream);
+    //         fileStream = new FileInputStream(file);
+
+    //         TokenCredential credential = new ClientSecretCredentialBuilder()
+    //             .clientId(System.getenv("kiota_client_id"))
+    //             .clientSecret(System.getenv("kiota_client_secret"))
+    //             .tenantId(System.getenv("kiota_tenant_id"))
+    //             .build();
+
+    //         CreateUploadSessionPostRequestBody uploadSessionRequest = new CreateUploadSessionPostRequestBody();
+    //         DriveItemUploadableProperties properties = new DriveItemUploadableProperties();
+    //         properties.getAdditionalData().put("@microsoft.graph.conflictBehavior", "replace");
+    //         uploadSessionRequest.setItem(properties);
+
+    //         // Set deferCommit to true
+    //         uploadSessionRequest.getAdditionalData().put("deferCommit", true);
+
+    //         GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+    //         // Fetch root drive ID
+    //         String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
+
+    //         // Create upload session with deferCommit => true
+    //         UploadSession uploadSession = client.drives()
+    //                 .byDriveId(myDriveId)
+    //                 .items()
+    //                 .byDriveItemId("root:/test/testDeferCommitFalse.txt:")
+    //                 .createUploadSession()
+    //                 .post(uploadSessionRequest);
+
+    //         int maxSliceSize = 409600;
+    //         LargeFileUploadTask<DriveItem> largeFileUploadTask = new LargeFileUploadTask<>(
+    //                 client.getRequestAdapter(),
+    //                 uploadSession,
+    //                 fileStream,
+    //                 streamSize,
+    //                 maxSliceSize,
+    //                 DriveItem::createFromDiscriminatorValue);
+
+    //         int maxAttempts = 5;
+    //         // Create a callback used by the upload provider
+    //         IProgressCallback callback = (current, max) -> System.out.println(
+    //                     String.format("Uploaded %d bytes of %d total bytes", current, max));
+
+    //         // Do the upload
+    //         UploadResult<DriveItem> uploadResult = largeFileUploadTask.upload(maxAttempts, callback);
+    //         if (!uploadResult.isUploadSuccessful()) {
+    //             System.out.println("Upload failed");
+    //         }
+
+    //         // Upload is successful
+
+    //         // Send final POST request to upload URL to complete the upload session
+    //         RequestInformation requestInformation = new RequestInformation(HttpMethod.POST, uploadSession.getUploadUrl(), new HashMap<String, Object>());
+    //         requestInformation.headers.add("Content-Length", "0");
+
+    //         // Add complete() method to LFU?
+    //         DriveItem completedUpload = client.getRequestAdapter().send(requestInformation, null, DriveItem::createFromDiscriminatorValue);
+
+    //         assertEquals(streamSize, completedUpload.getSize());
+
+    //         InputStream downloadedFile = client.drives()
+    //                 .byDriveId(myDriveId)
+    //                 .items()
+    //                 .byDriveItemId(completedUpload.getId())
+    //                 .content()
+    //                 .get();
+
+    //         assertEquals(uploadFileChecksum, DigestUtils.md5Hex(downloadedFile));
+
+    //     } catch (Exception exception) {
+    //         System.out.println(exception.getMessage());
+    //     }
+    // }
+
+
+    // @Test
+    // void testBatchingSample() {
+    //         TokenCredential credential = new ClientSecretCredentialBuilder()
+    //             .clientId(System.getenv("kiota_client_id"))
+    //             .clientSecret(System.getenv("kiota_client_secret"))
+    //             .tenantId(System.getenv("kiota_tenant_id"))
+    //             .build();
+
+    //     GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
+    //     try {
+    //         // Create the batch request content with the steps
+    //         final BatchRequestContent batchRequestContent = new BatchRequestContent(graphClient);
+
+    //         // Use the Graph client to generate the requestInformation object for GET /me
+    //         final RequestInformation meRequestInformation = graphClient.me().toGetRequestInformation();
+
+    //         final ZoneOffset localTimeZone = OffsetDateTime.now().getOffset();
+    //         final OffsetDateTime today = OffsetDateTime.of(
+    //             LocalDate.now(),
+    //             LocalTime.MIDNIGHT, localTimeZone);
+    //         final OffsetDateTime tomorrow = today.plusDays(1);
+
+    //         // Use the Graph client to generate the requestInformation for
+    //         // GET /me/calendarView?startDateTime="start"&endDateTime="end"
+    //         RequestInformation calenderViewRequestInformation = graphClient.me()
+    //             .calendarView().toGetRequestInformation(requestConfiguration -> {
+    //                 requestConfiguration.queryParameters.startDateTime = today.toString();
+    //                 requestConfiguration.queryParameters.endDateTime = tomorrow.toString();
+    //             });
+
+    //         // Add the requestInformation objects to the batch request content
+    //         final String meRequestId = batchRequestContent.addBatchRequestStep(meRequestInformation);
+    //         final String calendarViewRequestStepId = batchRequestContent.addBatchRequestStep(calenderViewRequestInformation);
+
+    //         // Send the batch request content to the /$batch endpoint
+    //         final BatchResponseContent batchResponseContent = Objects.requireNonNull(
+    //             graphClient.getBatchRequestBuilder().post(batchRequestContent, null));
+
+    //         // Get the user response using the id assigned to the request
+    //         final User me = batchResponseContent.getResponseById(
+    //             meRequestId,
+    //             User::createFromDiscriminatorValue
+    //         );
+    //         System.out.println(String.format("Hello %s!", me.getDisplayName()));
+
+    //         // Get the calendar view response by id
+    //         final EventCollectionResponse eventsResponse = Objects.requireNonNull(
+    //             batchResponseContent.getResponseById(calendarViewRequestStepId,
+    //                 EventCollectionResponse::createFromDiscriminatorValue));
+
+    //         System.out.println(String.format("You have %d events on your calendar today",
+    //             Objects.requireNonNull(eventsResponse.getValue()).size()));
+
+    //     } catch (Exception ex) {
+    //         System.out.println(ex.getMessage());
+    //     }
+    // }
 
 
 
@@ -346,8 +641,15 @@ class AppTest {
     //     GraphServiceClient client = new GraphServiceClient(credential, ".default");
     //     try {
     //         // Gets invalid user
-    //         // User user = client.users().byUserId("invalidUser@sk7xg.onmicrosoft.com").get();
-    //         var sites = client.sites().get();
+    //         User user = client.users().byUserId("invalidUser@sk7xg.onmicrosoft.com").get();
+
+    //         // read invalid sites
+
+    //         // var contacts = client.users().byUserId(USER_ID).
+
+    //         // var security = client.security().informationProtection().sensitivityLabels().get();
+
+    //         // var sites = client.sites().get();
     //         System.out.println("done");
     //         } catch (ODataError err) {
     //             System.out.println(err.getError().getCode());
@@ -401,16 +703,21 @@ class AppTest {
     //     try {
     //         List<Message> messagesToUpdate = new ArrayList<>();
 
+    //         int counter = 0;
     //         for (Message message : client.users().byUserId(USER_ID).messages().get().getValue()) {
+    //             if (counter > 5) {
+    //                 break;
+    //             }
     //             message.setIsRead(!message.getIsRead());
     //             messagesToUpdate.add(message);
+    //             counter ++;
     //             break;
     //         }
 
     //         BatchRequestContent batchRequestContent = new BatchRequestContent(client);
     //         messagesToUpdate.forEach(message -> {
     //             client.users().byUserId(USER_ID).messages().byMessageId(message.getId()).patch(message);
-    //             // batchRequestContent.addBatchRequestStep(client.users().byUserId(USER_ID).messages().byMessageId(message.getId()).toPatchRequestInformation(message));
+    //             batchRequestContent.addBatchRequestStep(client.users().byUserId(USER_ID).messages().byMessageId(message.getId()).toPatchRequestInformation(message));
     //         });
 
     //         BatchResponseContent batchResponseContent = client.getBatchRequestBuilder().post(batchRequestContent, null);
@@ -421,6 +728,7 @@ class AppTest {
     //         System.out.println(ex.getMessage());
     //     }
     // }
+
 
     // @Test
     // void testPatchEmail() {
@@ -438,9 +746,9 @@ class AppTest {
     //         Message newMessage = client.users().byUserId(USER_ID).messages().post(testMsg);
     //         System.out.println("Successful post! Id=" + newMessage.getId() + ", subject=" + newMessage.getSubject());
 
-    //         var patchMessage = new Message();
+    //         Message patchMessage = new Message();
     //         // patchMessage.setSubject("ANOTHER SUBJECT!");
-    //         var updatedMessage = client.users().byUserId(USER_ID).messages().byMessageId(newMessage.getId()).patch(patchMessage);
+    //         Message updatedMessage = client.users().byUserId(USER_ID).messages().byMessageId(newMessage.getId()).patch(patchMessage);
     //         System.out.println("Successful patch! Id=" + updatedMessage.getId() + ", subject=" + updatedMessage.getSubject());
 
 

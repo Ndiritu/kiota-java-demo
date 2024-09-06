@@ -20,55 +20,31 @@ dependencies {
     // Use JUnit Jupiter for testing.
     testImplementation libs.junit.jupiter
 
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
-    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.10.2'
-    testImplementation 'io.opentelemetry:opentelemetry-api:1.37.0'
-    testImplementation 'io.opentelemetry:opentelemetry-context:1.37.0'
-    testImplementation 'io.opentelemetry.semconv:opentelemetry-semconv:1.25.0-alpha'
-    testImplementation 'io.opentelemetry.semconv:opentelemetry-semconv-incubating:1.25.0-alpha'
-    testImplementation 'io.github.std-uritemplate:std-uritemplate:0.0.55'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.7.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.7.2'
+    // // testImplementation 'io.opentelemetry:opentelemetry-api:1.37.0'
+    // // testImplementation 'io.opentelemetry:opentelemetry-context:1.37.0'
+    // // testImplementation 'io.github.std-uritemplate:std-uritemplate:0.0.57'
     testImplementation 'commons-codec:commons-codec:1.16.1'
 
-    // Use JUnit Jupiter Engine for testing.
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    // // Use JUnit Jupiter Engine for testing.
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.2'
 
     // This dependency is used by the application.
     // implementation libs.guava
 
-    implementation ('com.microsoft.graph:microsoft-graph:6.4.0') {
-        exclude group: 'com.microsoft.graph', module: 'microsoft-graph-core'
-        exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-authentication-azure'
-        exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-http-okHttp'
-        exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-serialization-json'
-        exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-serialization-text'
-        exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-serialization-form'
-        exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-serialization-multipart'
-    }
+    implementation 'com.microsoft.graph:microsoft-graph:6.14.0'
+    // implementation 'com.microsoft.graph:microsoft-graph-beta:6.9.0'
 
-    implementation files(
-        '/home/ndiritu/projects/msgraph-sdk-java-core/build/libs/msgraph-sdk-java-core.jar',
-        '/home/ndiritu/projects/kiota-java/components/abstractions/build/libs/abstractions.jar',
-        '/home/ndiritu/projects/kiota-java/components/authentication/azure/build/libs/azure.jar',
-        '/home/ndiritu/projects/kiota-java/components/http/okHttp/build/libs/okHttp.jar',
-        '/home/ndiritu/projects/kiota-java/components/serialization/form/build/libs/form.jar',
-        '/home/ndiritu/projects/kiota-java/components/serialization/json/build/libs/json.jar',
-        '/home/ndiritu/projects/kiota-java/components/serialization/multipart/build/libs/multipart.jar',
-        '/home/ndiritu/projects/kiota-java/components/serialization/text/build/libs/text.jar'
-    )
+    // implementation 'com.microsoft.graph:microsoft-graph-core:3.1.9'
 
-    // implementation 'com.microsoft.graph:microsoft-graph-core:3.1.5'
-    // implementation 'com.microsoft.kiota:microsoft-kiota-authentication-azure:1.0.6'
-    // implementation 'com.microsoft.kiota:microsoft-kiota-http-okHttp:1.0.6'
-    // implementation 'com.microsoft.kiota:microsoft-kiota-serialization-json:1.0.6'
-    // implementation 'com.microsoft.kiota:microsoft-kiota-serialization-text:1.0.6'
-    // implementation 'com.microsoft.kiota:microsoft-kiota-serialization-form:1.0.6'
-    // implementation 'com.microsoft.kiota:microsoft-kiota-serialization-multipart:1.0.6'
+    implementation 'com.azure:azure-identity:1.13.0'
+
     implementation 'com.google.code.gson:gson:2.8.8'
 
-    // This dependency is only needed if you are using a TokenCredential object for authentication
-    implementation 'com.azure:azure-identity:1.11.0'
+    // testImplementation 'org.mockito:mockito-inline:5.2.0'
+    testImplementation 'org.mockito:mockito-inline:4.11.0'
 
-    testImplementation 'org.mockito:mockito-inline:5.2.0'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

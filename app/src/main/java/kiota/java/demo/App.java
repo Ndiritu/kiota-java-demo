@@ -3,12 +3,43 @@
  */
 package kiota.java.demo;
 
+import com.azure.core.credential.TokenCredential;
+import com.microsoft.graph.models.OnenotePage;
+// import com.microsoft.graph.beta.serviceclient.GraphServiceClient;
+import com.microsoft.graph.models.User;
+import com.microsoft.graph.models.security.AlertCollectionResponse;
+import com.microsoft.graph.models.security.AlertComment;
+import com.microsoft.graph.serviceclient.GraphServiceClient;
+import com.microsoft.kiota.serialization.KiotaJsonSerialization;
+import com.microsoft.graph.core.authentication.AzureIdentityAuthenticationProvider;
+import com.azure.identity.ClientSecretCredentialBuilder;
+
 public class App {
+
+    static final String USER_ID = "pgichuhi@sk7xg.onmicrosoft.com";
+
     public String getGreeting() {
         return "Hello World!";
     }
 
     public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
+
+        TokenCredential credential = new ClientSecretCredentialBuilder()
+            .clientId(System.getenv("kiota_client_id"))
+            .clientSecret(System.getenv("kiota_client_secret"))
+            .tenantId(System.getenv("kiota_tenant_id"))
+            .build();
+
+        GraphServiceClient client = new GraphServiceClient(credential, ".default");
+
+        // client.servicePrincipals().byServicePrincipalId(USER_ID).claimsPolicy().get();
+
+
+        // // AzureIdentityAuthenticationProvider authProvider = new AzureIdentityAuthenticationProvider(credential, null, "https://graph.microsoft.com/.default");
+        // GraphServiceClient client = new GraphServiceClient(credential, "https://graph.microsoft.com/.default");
+        // // GraphServiceClient client = new GraphServiceClient(authProvider);
+        // User result = client.users().byUserId(USER_ID).get();
+        // System.out.println(result.getDisplayName());
+        // System.out.println(result.getUserPrincipalName());
     }
 }
