@@ -22,9 +22,9 @@ dependencies {
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.2'
     testImplementation 'org.junit.jupiter:junit-jupiter-params:5.7.2'
-    // // testImplementation 'io.opentelemetry:opentelemetry-api:1.37.0'
-    // // testImplementation 'io.opentelemetry:opentelemetry-context:1.37.0'
-    // // testImplementation 'io.github.std-uritemplate:std-uritemplate:0.0.57'
+    testImplementation 'io.opentelemetry:opentelemetry-api:1.42.0'
+    testImplementation 'io.opentelemetry:opentelemetry-context:1.42.0'
+    testImplementation 'io.github.std-uritemplate:std-uritemplate:1.0.6'
     testImplementation 'commons-codec:commons-codec:1.16.1'
 
     // // Use JUnit Jupiter Engine for testing.
@@ -33,7 +33,14 @@ dependencies {
     // This dependency is used by the application.
     // implementation libs.guava
 
-    implementation 'com.microsoft.graph:microsoft-graph:6.14.0'
+    implementation ('com.microsoft.graph:microsoft-graph:6.14.0') {
+        exclude group: 'com.microsoft.kiota', module: 'microsoft-kiota-abstractions'
+    }
+
+    implementation files(
+        '/home/ndiritu/projects/kiota-java/components/abstractions/build/libs/abstractions.jar'
+    )
+
     // implementation 'com.microsoft.graph:microsoft-graph-beta:6.9.0'
 
     // implementation 'com.microsoft.graph:microsoft-graph-core:3.1.9'

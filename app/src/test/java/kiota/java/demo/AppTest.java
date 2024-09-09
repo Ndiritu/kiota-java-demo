@@ -110,54 +110,35 @@ class AppTest {
 
         GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
 
-        // var groupId = "0058f9a0-005a-4e20-b875-4878c99e4f44";
-
-        // Group group = graphClient.groups().byGroupId(groupId).get(
-        //     requestConfig -> requestConfig.queryParameters.select = new String[]{"id", "displayName", "resourceProvisioningOptions"}
-        // );
-
-        // Team team = graphClient.teams().byTeamId(groupId).get();
-
-        // group.setTeam(team);
-
-        // System.out.println("Group id=" + group.getId() + ", name=" + group.getDisplayName());
-
-
         GroupCollectionResponse groupCollectionResponse = graphClient.groups().get(
                 requestConfig -> requestConfig.queryParameters.select = new String[]{"id", "displayName", "resourceProvisioningOptions"});
 
-        List<Group> groups = groupCollectionResponse.getValue();
-        // List<Group> groups = new ArrayList<>();
+        // List<Group> groups = groupCollectionResponse.getValue();
+        List<Group> groups = new ArrayList<>();
 
-        // PageIterator<Group, BaseCollectionPaginationCountResponse> pageIterator =
-        //         new PageIterator.Builder<Group, BaseCollectionPaginationCountResponse>()
-        //                 .client(graphClient)
-        //                 .collectionPage(Objects.requireNonNull(groupCollectionResponse))
-        //                 .collectionPageFactory(GroupCollectionResponse::createFromDiscriminatorValue)
-        //                 .requestConfigurator(requestInfo ->
-        //                 {
-        //                     requestInfo.addQueryParameter("%24select", new String[]{"id", "displayName", "resourceProvisioningOptions"});
-        //                     return requestInfo;
-        //                 })
-        //                 .processPageItemCallback(groups::add)
-        //                 .build();
+        PageIterator<Group, BaseCollectionPaginationCountResponse> pageIterator =
+                new PageIterator.Builder<Group, BaseCollectionPaginationCountResponse>()
+                        .client(graphClient)
+                        .collectionPage(Objects.requireNonNull(groupCollectionResponse))
+                        .collectionPageFactory(GroupCollectionResponse::createFromDiscriminatorValue)
+                        .requestConfigurator(requestInfo ->
+                        {
+                            requestInfo.addQueryParameter("%24select", new String[]{"id", "displayName", "resourceProvisioningOptions"});
+                            return requestInfo;
+                        })
+                        .processPageItemCallback(groups::add)
+                        .build();
 
-        // pageIterator.iterate();
+        pageIterator.iterate();
 
-        var group = groups.get(0);
-        Team team = graphClient.teams().byTeamId(group.getId()).get();
-        group.setTeam(team);
-
-        System.out.println("Group id=" + group.getId() + ", name=" + group.getDisplayName());
-
-
-        // for (Group group : groups)
-        // {
-        //     if (isTeam(group)) {
-        //         Team team = graphClient.teams().byTeamId(group.getId()).get();
-        //         group.setTeam(team);
-        //     }
-        // }
+        for (Group group : groups)
+        {
+            if (isTeam(group)) {
+                Team team = graphClient.teams().byTeamId(group.getId()).get();
+                group.setTeam(team);
+                System.out.println("Group id=" + group.getId() + ", name=" + group.getDisplayName());
+            }
+        }
     }
 
     public boolean isTeam(Group group)
