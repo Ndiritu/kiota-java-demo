@@ -13,9 +13,12 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Arrays;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.codec.digest.DigestUtils;
@@ -27,19 +30,26 @@ import com.azure.identity.ClientSecretCredentialBuilder;
 import com.google.gson.JsonParser;
 import com.microsoft.graph.core.content.BatchRequestContent;
 import com.microsoft.graph.core.content.BatchResponseContent;
+import com.microsoft.graph.core.models.BatchRequestStep;
 import com.microsoft.graph.core.models.IProgressCallback;
 import com.microsoft.graph.core.models.UploadResult;
 import com.microsoft.graph.core.requests.GraphClientFactory;
 import com.microsoft.graph.core.tasks.LargeFileUploadTask;
 import com.microsoft.graph.core.tasks.PageIterator;
 import com.microsoft.graph.drives.item.items.item.createuploadsession.CreateUploadSessionPostRequestBody;
+import com.microsoft.graph.models.ApiApplication;
+import com.microsoft.graph.models.Application;
 import com.microsoft.graph.models.Attachment;
+import com.microsoft.graph.models.AttachmentCollectionResponse;
 import com.microsoft.graph.models.AttachmentItem;
 import com.microsoft.graph.models.AttachmentType;
+import com.microsoft.graph.models.Attendee;
 import com.microsoft.graph.models.BaseCollectionPaginationCountResponse;
 import com.microsoft.graph.models.DriveItem;
 import com.microsoft.graph.models.DriveItemUploadableProperties;
+import com.microsoft.graph.models.EmailAddress;
 import com.microsoft.graph.models.Entity;
+import com.microsoft.graph.models.Event;
 import com.microsoft.graph.models.EventCollectionResponse;
 import com.microsoft.graph.models.Group;
 import com.microsoft.graph.models.GroupCollectionResponse;
@@ -47,7 +57,11 @@ import com.microsoft.graph.models.Message;
 import com.microsoft.graph.models.MessageCollectionResponse;
 import com.microsoft.graph.models.Onenote;
 import com.microsoft.graph.models.OnenotePage;
+import com.microsoft.graph.models.PermissionScope;
 import com.microsoft.graph.models.PlannerAssignments;
+import com.microsoft.graph.models.Recipient;
+import com.microsoft.graph.models.ServicePrincipalCollectionResponse;
+import com.microsoft.graph.models.Site;
 import com.microsoft.graph.models.Team;
 import com.microsoft.graph.models.UploadSession;
 import com.microsoft.graph.models.User;
@@ -56,11 +70,19 @@ import com.microsoft.graph.models.odataerrors.ODataError;
 import com.microsoft.graph.serviceclient.GraphServiceClient;
 import com.microsoft.kiota.ApiException;
 import com.microsoft.kiota.HttpMethod;
+import com.microsoft.kiota.NativeResponseHandler;
 import com.microsoft.kiota.RequestInformation;
+import com.microsoft.kiota.ResponseHandlerOption;
+import com.microsoft.kiota.http.OkHttpRequestAdapter;
 import com.microsoft.kiota.serialization.KiotaJsonSerialization;
 import com.microsoft.kiota.serialization.UntypedArray;
 import com.microsoft.kiota.serialization.UntypedDouble;
 import com.microsoft.kiota.serialization.UntypedNode;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+
 import com.microsoft.graph.core.authentication.AzureIdentityAuthenticationProvider;
 
 // import okhttp3.Call;
@@ -76,7 +98,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.io.InputStream;
+import java.lang.reflect.Array;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -85,6 +109,43 @@ import java.net.URI;
 class AppTest {
 
     final String USER_ID = "pgichuhi@sk7xg.onmicrosoft.com";
+
+    @Test
+    void updateApplicationScopes() {
+        try {
+            TokenCredential credential = new ClientSecretCredentialBuilder()
+                    .clientId(System.getenv("kiota_client_id"))
+                    .clientSecret(System.getenv("kiota_client_secret"))
+                    .tenantId(System.getenv("kiota_tenant_id"))
+                    .build();
+
+            GraphServiceClient client = new GraphServiceClient(credential, ".default");
+            String appId = "3e90e1bf-6e1d-4f4e-a582-1c399aae626b";
+
+            Application app = new Application();
+            ApiApplication apiApp = new ApiApplication();
+            PermissionScope permissionScope = new PermissionScope();
+            permissionScope.setUserConsentDescription("Allows the app to read user's profile.");
+            permissionScope.setUserConsentDisplayName("Read user profile");
+            permissionScope.setId(UUID.fromString("10465720-29dd-4523-a11a-6a75c743c9d9"));
+            permissionScope.setType("User");
+            permissionScope.setIsEnabled(true);
+            permissionScope.setValue("Files.Read");
+            apiApp.setOauth2PermissionScopes(Arrays.asList(permissionScope));
+            app.setApi(apiApp);
+
+            var response = client.applications().byApplicationId(appId).patch(app);
+            System.out.println("Response: " + response);
+
+            // Fetch the same application object again
+            Application updatedApp = client.applications().byApplicationId(appId).get();
+            System.out.println("Updated app: " + updatedApp.getDisplayName());
+        } catch (Exception ex) {
+            System.out.println(ex.getMessage());
+        }
+
+    }
+
 
     // @Test
     // void certBasedAuthentication() {
@@ -99,77 +160,260 @@ class AppTest {
     //     System.out.println("User: " + user.getDisplayName());
     // }
 
-    @Test
-    void infiniteLoop() throws ReflectiveOperationException
-    {
-        TokenCredential credential = new ClientSecretCredentialBuilder()
-                    .clientId(System.getenv("kiota_client_id"))
-                    .clientSecret(System.getenv("kiota_client_secret"))
-                    .tenantId(System.getenv("kiota_tenant_id"))
-                    .build();
+    // @Test
+    // void testGraphClientFactoryBuildsClientThatAuthenticates() throws IOException
+    // {
+    //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    //                 .clientId(System.getenv("kiota_client_id"))
+    //                 .clientSecret(System.getenv("kiota_client_secret"))
+    //                 .tenantId(System.getenv("kiota_tenant_id"))
+    //                 .build();
 
-        GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
+    //     var authProvider = new AzureIdentityAuthenticationProvider(
+    //         credential,
+    //         new String[]{"graph.microsoft.com"},
+    //         ".default");
+    //     OkHttpClient client = GraphClientFactory.create(authProvider).build();
 
-        GroupCollectionResponse groupCollectionResponse = graphClient.groups().get(
-                requestConfig -> requestConfig.queryParameters.select = new String[]{"id", "displayName", "resourceProvisioningOptions"});
+    //     var response = client.newCall(new Request.Builder().url("https://graph.microsoft.com/v1.0/users/" + USER_ID).get().build()).execute();
+    //     var responseBody = response.body().string();
+    //     var json = JsonParser.parseString(responseBody);
+    //     var displayName = json.getAsJsonObject().get("displayName").getAsString();
+    //     assertEquals("Ndiritu", displayName);
+    // }
 
-        // List<Group> groups = groupCollectionResponse.getValue();
-        List<Group> groups = new ArrayList<>();
+    // @Test
+    // void testSerializationHelperConfiguresBackingStore() throws IOException
+    // {
+    //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    //                 .clientId(System.getenv("kiota_client_id"))
+    //                 .clientSecret(System.getenv("kiota_client_secret"))
+    //                 .tenantId(System.getenv("kiota_tenant_id"))
+    //                 .build();
 
-        PageIterator<Group, BaseCollectionPaginationCountResponse> pageIterator =
-                new PageIterator.Builder<Group, BaseCollectionPaginationCountResponse>()
-                        .client(graphClient)
-                        .collectionPage(Objects.requireNonNull(groupCollectionResponse))
-                        .collectionPageFactory(GroupCollectionResponse::createFromDiscriminatorValue)
-                        .requestConfigurator(requestInfo ->
-                        {
-                            requestInfo.addQueryParameter("%24select", new String[]{"id", "displayName", "resourceProvisioningOptions"});
-                            return requestInfo;
-                        })
-                        .processPageItemCallback(groups::add)
-                        .build();
+    //     GraphServiceClient client = new GraphServiceClient(credential, ".default");
 
-        pageIterator.iterate();
+    //     ServicePrincipalCollectionResponse result = client.servicePrincipals().get();
 
-        for (Group group : groups)
-        {
-            if (isTeam(group)) {
-                Team team = graphClient.teams().byTeamId(group.getId()).get();
-                group.setTeam(team);
-                System.out.println("Group id=" + group.getId() + ", name=" + group.getDisplayName());
-            }
-        }
-    }
+    //     User user = client.users().byUserId(USER_ID).get();
+    //     // No changed values
+    //     String userJson = KiotaJsonSerialization.serializeAsString(user);
+    //     System.out.println("User: " + userJson);
 
-    public boolean isTeam(Group group)
-    {
-        Objects.requireNonNull(group);
-        Objects.requireNonNull(group.getAdditionalData());
+    //     // Prints unchanged values
+    //     var userSerialized = KiotaJsonSerialization.serializeAsString(user, false);
+    //     System.out.println("User: " + userSerialized);
+    // }
 
-        return getAdditionalDataStringList(group, "resourceProvisioningOptions").contains("Team");
-    }
+    // @Test
+    // void testAddAttendeeToEvent() {
+    //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    //                 .clientId(System.getenv("kiota_client_id"))
+    //                 .clientSecret(System.getenv("kiota_client_secret"))
+    //                 .tenantId(System.getenv("kiota_tenant_id"))
+    //                 .build();
+    //     GraphServiceClient graphServiceClient = new GraphServiceClient(credential, ".default");
 
-    List<String> getAdditionalDataStringList(Entity entity, String key)
-    {
-        if (entity == null
-            || key == null
-            || key.isEmpty()
-            || !entity.getAdditionalData().containsKey(key))
-            return Collections.emptyList();
 
-        List<String> result = new ArrayList<>();
+    //     OkHttpClient client = GraphClientFactory.create().readTimeout(Duration.ofSeconds(180)).build();
+    //     GraphServiceClient graphClient = new GraphServiceClient(
+    //         new AzureIdentityAuthenticationProvider(credential, new String[] {}, ".default"),
+    //         client
+    //     );
 
-        UntypedArray untypedArray = (UntypedArray) entity.getAdditionalData().get("resourceProvisioningOptions");
-        for (UntypedNode untypedNode : untypedArray.getValue())
-        {
-            if (untypedNode.getValue() == null)
-                continue;
+    //     try {
+    //         var eventId = "AQMkAGU1MzAyZTlmLThkYTEtNGJmNC05Y2JhLWViMGQ1OTQ5NGIzOQBGAAADvFsxs-DFDkeqT3iavqddSwcAww1vIlaKmEamx3SUBPL60wAAAgENAAAAww1vIlaKmEamx3SUBPL60wABNXlHLAAAAA==";
+    //         Event event = graphServiceClient.users().byUserId(USER_ID).events().byEventId(eventId).get();
 
-            result.add(untypedNode.getValue().toString());
-        }
+    //         Attendee attendee = new Attendee();
+    //         EmailAddress emailAddress = new EmailAddress();
+    //         emailAddress.setName("Philo");
+    //         emailAddress.setAddress(USER_ID);
+    //         attendee.setEmailAddress(emailAddress);
 
-        return result;
-    }
+    //         event.setAttendees(Arrays.asList(attendee));
+
+    //         Event updatedEvent = graphServiceClient.users().byUserId(USER_ID).events().byEventId(eventId).patch(event);
+
+    //         emailAddress.setName("Ndiritu");
+    //         emailAddress.setAddress("pgichuhi@gmail.com");
+
+    //         updatedEvent.getAttendees().add(attendee);
+
+    //         Event anotherUpdatedEvent = graphServiceClient.users().byUserId(USER_ID).events().byEventId(eventId).patch(updatedEvent);
+
+    //         System.out.println("Attendees: " + anotherUpdatedEvent.getAttendees().size());
+
+    //     } catch (Exception ex) {
+    //         System.out.println(ex.getMessage());
+    //         throw ex;
+    //     }
+    // }
+
+    // @Test
+    // void testBackingStore() {
+    //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    //                 .clientId(System.getenv("kiota_client_id"))
+    //                 .clientSecret(System.getenv("kiota_client_secret"))
+    //                 .tenantId(System.getenv("kiota_tenant_id"))
+    //                 .build();
+
+    //     GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
+
+    //     try {
+    //         // Get User
+    //         User user = graphClient.users().byUserId(USER_ID).get();
+    //         // Patch
+    //         // var businessPhones = user.getBusinessPhones();
+    //         // businessPhones.add("254727608862");
+    //         user.setJobTitle("Snr Software Engineer");
+    //         User updatedUser = graphClient.users().byUserId(USER_ID).patch(user);
+    //         if (updatedUser != null) {
+    //             System.out.println("User: " + updatedUser.getDisplayName());
+    //         }
+
+
+    //         var messageId = "AQMkAGU1MzAyZTlmLThkYTEtNGJmNC05Y2JhLWViMGQ1OTQ5NGIzOQBGAAADvFsxs-DFDkeqT3iavqddSwcAww1vIlaKmEamx3SUBPL60wAAAgEMAAAAww1vIlaKmEamx3SUBPL60wACWC1YUAAAAA==";
+    //         // MessageCollectionResponse messages = graphClient.users().byUserId(USER_ID).messages().get();
+    //         Message message = graphClient.users().byUserId(USER_ID).messages().byMessageId(messageId).get();
+    //         message.setSubject("Updated subject Today");
+
+    //         var newRecipient = new Recipient();
+    //         var newEmail = new EmailAddress();
+    //         newEmail.setName("Philo");
+    //         newEmail.setAddress("philipndiritu@outlook.com");
+    //         newRecipient.setEmailAddress(newEmail);
+
+    //         message.getToRecipients().add(newRecipient);
+
+    //         Message updatedMessage = graphClient.users().byUserId(USER_ID).messages().byMessageId(message.getId()).patch(message);
+
+    //         // MessageCollectionResponse updatedMessages = graphClient.users().byUserId(USER_ID).messages().patch(messages);
+
+    //     } catch (Exception ex) {
+    //         System.out.println(ex.getMessage());
+    //         throw ex;
+    //     }
+    // }
+
+    // @Test
+    // void testBackingStoreUndefinedBehaviour() throws Exception {
+    //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    //                 .clientId(System.getenv("kiota_client_id"))
+    //                 .clientSecret(System.getenv("kiota_client_secret"))
+    //                 .tenantId(System.getenv("kiota_tenant_id"))
+    //                 .build();
+
+    //     GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
+
+    //     NativeResponseHandler nativeResponseHandler = new NativeResponseHandler();
+    //     ResponseHandlerOption responseHandlerOption = new ResponseHandlerOption();
+    //     responseHandlerOption.setResponseHandler(nativeResponseHandler);
+
+    //     // var response = graphClient.sites().get(
+    //     //     requestConfiguration -> {
+    //     //         requestConfiguration.queryParameters.select = new String[]{"id", "name"};
+    //     //         requestConfiguration.queryParameters.search = "";
+    //     //         requestConfiguration.options = Arrays.asList(responseHandlerOption);
+    //     //     }
+    //     // );
+
+    //     var response = graphClient.sites().withUrl("https://graph.microsoft.com/v1.0/sites?select=id,name&search=").get(
+    //         requestConfiguration -> {
+    //             requestConfiguration.options = Arrays.asList(responseHandlerOption);
+    //         }
+    //     );
+
+
+    //     Response nativeResponse = (Response) nativeResponseHandler.getValue();
+    //     String responseBody = nativeResponse.body().string();
+    //     Request request = nativeResponse.request();
+
+    //     GroupCollectionResponse groupCollectionResponse = graphClient.groups().get(
+    //             requestConfig -> requestConfig.queryParameters.select = new String[]{"id", "displayName", "resourceProvisioningOptions"});
+
+    //     List<Group> groups = groupCollectionResponse.getValue();
+
+    //     for (Group group : groups)
+    //     {
+    //         if (isTeam(group)) {
+    //             Team team = graphClient.teams().byTeamId(group.getId()).get();
+    //             group.setTeam(team);
+    //             System.out.println("Group id=" + group.getId() + ", name=" + group.getDisplayName());
+    //         }
+    //     }
+    // }
+
+    // @Test
+    // void infiniteLoop() throws Exception {
+    //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    //                 .clientId(System.getenv("kiota_client_id"))
+    //                 .clientSecret(System.getenv("kiota_client_secret"))
+    //                 .tenantId(System.getenv("kiota_tenant_id"))
+    //                 .build();
+
+    //     GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
+
+    //     GroupCollectionResponse groupCollectionResponse = graphClient.groups().get(
+    //             requestConfig -> requestConfig.queryParameters.select = new String[]{"id", "displayName", "resourceProvisioningOptions"});
+
+    //     // List<Group> groups = groupCollectionResponse.getValue();
+    //     List<Group> groups = new ArrayList<>();
+
+    //     PageIterator<Group, BaseCollectionPaginationCountResponse> pageIterator =
+    //             new PageIterator.Builder<Group, BaseCollectionPaginationCountResponse>()
+    //                     .client(graphClient)
+    //                     .collectionPage(Objects.requireNonNull(groupCollectionResponse))
+    //                     .collectionPageFactory(GroupCollectionResponse::createFromDiscriminatorValue)
+    //                     .requestConfigurator(requestInfo ->
+    //                     {
+    //                         requestInfo.addQueryParameter("%24select", new String[]{"id", "displayName", "resourceProvisioningOptions"});
+    //                         return requestInfo;
+    //                     })
+    //                     .processPageItemCallback(groups::add)
+    //                     .build();
+
+    //     pageIterator.iterate();
+
+    //     for (Group group : groups)
+    //     {
+    //         if (isTeam(group)) {
+    //             Team team = graphClient.teams().byTeamId(group.getId()).get();
+    //             group.setTeam(team);
+    //             System.out.println("Group id=" + group.getId() + ", name=" + group.getDisplayName());
+    //         }
+    //     }
+    // }
+
+    // public boolean isTeam(Group group)
+    // {
+    //     Objects.requireNonNull(group);
+    //     Objects.requireNonNull(group.getAdditionalData());
+
+    //     return getAdditionalDataStringList(group, "resourceProvisioningOptions").contains("Team");
+    // }
+
+    // List<String> getAdditionalDataStringList(Entity entity, String key)
+    // {
+    //     if (entity == null
+    //         || key == null
+    //         || key.isEmpty()
+    //         || !entity.getAdditionalData().containsKey(key))
+    //         return Collections.emptyList();
+
+    //     List<String> result = new ArrayList<>();
+
+    //     UntypedArray untypedArray = (UntypedArray) entity.getAdditionalData().get("resourceProvisioningOptions");
+    //     for (UntypedNode untypedNode : untypedArray.getValue())
+    //     {
+    //         if (untypedNode.getValue() == null)
+    //             continue;
+
+    //         result.add(untypedNode.getValue().toString());
+    //     }
+
+    //     return result;
+    // }
 
     // @Test
     // void testGetWorkSheetCellValue() {
@@ -384,7 +628,8 @@ class AppTest {
     // void testLargeFileUploadToOneDrive() {
     //     try {
     //         // Read file
-    //         File file = new File("/home/ndiritu/projects/kiota-java-demo/app/src/test/resources/testWorkbook.xlsx");
+
+    //         File file = new File("/home/ndiritu/projects/msgraph-beta-sdk-java/build/libs/msgraph-beta-sdk-java.jar");
     //         InputStream fileStream = new FileInputStream(file);
     //         long streamSize = file.length();
 
@@ -408,13 +653,11 @@ class AppTest {
     //         // Fetch root drive ID
     //         String myDriveId = client.users().byUserId(USER_ID).drive().get().getId();
 
-    //         assertTrue(false);
-
     //         // Create upload session
     //         UploadSession uploadSession = client.drives()
     //                 .byDriveId(myDriveId)
     //                 .items()
-    //                 .byDriveItemId("root:/test/testWorkbook.xlsx:")
+    //                 .byDriveItemId("root:/test/msgraph-beta-sdk-java.jar:")
     //                 .createUploadSession()
     //                 .post(uploadSessionRequest);
 
@@ -552,125 +795,125 @@ class AppTest {
     // }
 
 
-    // @Test
-    // void testBatchingSample() {
-    //         TokenCredential credential = new ClientSecretCredentialBuilder()
-    //             .clientId(System.getenv("kiota_client_id"))
-    //             .clientSecret(System.getenv("kiota_client_secret"))
-    //             .tenantId(System.getenv("kiota_tenant_id"))
-    //             .build();
+    // // @Test
+    // // void testBatchingSample() {
+    // //         TokenCredential credential = new ClientSecretCredentialBuilder()
+    // //             .clientId(System.getenv("kiota_client_id"))
+    // //             .clientSecret(System.getenv("kiota_client_secret"))
+    // //             .tenantId(System.getenv("kiota_tenant_id"))
+    // //             .build();
 
-    //     GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
-    //     try {
-    //         // Create the batch request content with the steps
-    //         final BatchRequestContent batchRequestContent = new BatchRequestContent(graphClient);
+    // //     GraphServiceClient graphClient = new GraphServiceClient(credential, ".default");
+    // //     try {
+    // //         // Create the batch request content with the steps
+    // //         final BatchRequestContent batchRequestContent = new BatchRequestContent(graphClient);
 
-    //         // Use the Graph client to generate the requestInformation object for GET /me
-    //         final RequestInformation meRequestInformation = graphClient.me().toGetRequestInformation();
+    // //         // Use the Graph client to generate the requestInformation object for GET /me
+    // //         final RequestInformation meRequestInformation = graphClient.me().toGetRequestInformation();
 
-    //         final ZoneOffset localTimeZone = OffsetDateTime.now().getOffset();
-    //         final OffsetDateTime today = OffsetDateTime.of(
-    //             LocalDate.now(),
-    //             LocalTime.MIDNIGHT, localTimeZone);
-    //         final OffsetDateTime tomorrow = today.plusDays(1);
+    // //         final ZoneOffset localTimeZone = OffsetDateTime.now().getOffset();
+    // //         final OffsetDateTime today = OffsetDateTime.of(
+    // //             LocalDate.now(),
+    // //             LocalTime.MIDNIGHT, localTimeZone);
+    // //         final OffsetDateTime tomorrow = today.plusDays(1);
 
-    //         // Use the Graph client to generate the requestInformation for
-    //         // GET /me/calendarView?startDateTime="start"&endDateTime="end"
-    //         RequestInformation calenderViewRequestInformation = graphClient.me()
-    //             .calendarView().toGetRequestInformation(requestConfiguration -> {
-    //                 requestConfiguration.queryParameters.startDateTime = today.toString();
-    //                 requestConfiguration.queryParameters.endDateTime = tomorrow.toString();
-    //             });
+    // //         // Use the Graph client to generate the requestInformation for
+    // //         // GET /me/calendarView?startDateTime="start"&endDateTime="end"
+    // //         RequestInformation calenderViewRequestInformation = graphClient.me()
+    // //             .calendarView().toGetRequestInformation(requestConfiguration -> {
+    // //                 requestConfiguration.queryParameters.startDateTime = today.toString();
+    // //                 requestConfiguration.queryParameters.endDateTime = tomorrow.toString();
+    // //             });
 
-    //         // Add the requestInformation objects to the batch request content
-    //         final String meRequestId = batchRequestContent.addBatchRequestStep(meRequestInformation);
-    //         final String calendarViewRequestStepId = batchRequestContent.addBatchRequestStep(calenderViewRequestInformation);
+    // //         // Add the requestInformation objects to the batch request content
+    // //         final String meRequestId = batchRequestContent.addBatchRequestStep(meRequestInformation);
+    // //         final String calendarViewRequestStepId = batchRequestContent.addBatchRequestStep(calenderViewRequestInformation);
 
-    //         // Send the batch request content to the /$batch endpoint
-    //         final BatchResponseContent batchResponseContent = Objects.requireNonNull(
-    //             graphClient.getBatchRequestBuilder().post(batchRequestContent, null));
+    // //         // Send the batch request content to the /$batch endpoint
+    // //         final BatchResponseContent batchResponseContent = Objects.requireNonNull(
+    // //             graphClient.getBatchRequestBuilder().post(batchRequestContent, null));
 
-    //         // Get the user response using the id assigned to the request
-    //         final User me = batchResponseContent.getResponseById(
-    //             meRequestId,
-    //             User::createFromDiscriminatorValue
-    //         );
-    //         System.out.println(String.format("Hello %s!", me.getDisplayName()));
+    // //         // Get the user response using the id assigned to the request
+    // //         final User me = batchResponseContent.getResponseById(
+    // //             meRequestId,
+    // //             User::createFromDiscriminatorValue
+    // //         );
+    // //         System.out.println(String.format("Hello %s!", me.getDisplayName()));
 
-    //         // Get the calendar view response by id
-    //         final EventCollectionResponse eventsResponse = Objects.requireNonNull(
-    //             batchResponseContent.getResponseById(calendarViewRequestStepId,
-    //                 EventCollectionResponse::createFromDiscriminatorValue));
+    // //         // Get the calendar view response by id
+    // //         final EventCollectionResponse eventsResponse = Objects.requireNonNull(
+    // //             batchResponseContent.getResponseById(calendarViewRequestStepId,
+    // //                 EventCollectionResponse::createFromDiscriminatorValue));
 
-    //         System.out.println(String.format("You have %d events on your calendar today",
-    //             Objects.requireNonNull(eventsResponse.getValue()).size()));
+    // //         System.out.println(String.format("You have %d events on your calendar today",
+    // //             Objects.requireNonNull(eventsResponse.getValue()).size()));
 
-    //     } catch (Exception ex) {
-    //         System.out.println(ex.getMessage());
-    //     }
-    // }
+    // //     } catch (Exception ex) {
+    // //         System.out.println(ex.getMessage());
+    // //     }
+    // // }
 
 
 
-    // @Test void testErrorHandling() {
-    //     TokenCredential credential = new ClientSecretCredentialBuilder()
-    //         .clientId(System.getenv("kiota_client_id"))
-    //         .clientSecret(System.getenv("kiota_client_secret"))
-    //         .tenantId(System.getenv("kiota_tenant_id"))
-    //         .build();
+    // // @Test void testErrorHandling() {
+    // //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    // //         .clientId(System.getenv("kiota_client_id"))
+    // //         .clientSecret(System.getenv("kiota_client_secret"))
+    // //         .tenantId(System.getenv("kiota_tenant_id"))
+    // //         .build();
 
-    //     GraphServiceClient client = new GraphServiceClient(credential, ".default");
-    //     try {
-    //         // Gets invalid user
-    //         User user = client.users().byUserId("invalidUser@sk7xg.onmicrosoft.com").get();
+    // //     GraphServiceClient client = new GraphServiceClient(credential, ".default");
+    // //     try {
+    // //         // Gets invalid user
+    // //         User user = client.users().byUserId("invalidUser@sk7xg.onmicrosoft.com").get();
 
-    //         // read invalid sites
+    // //         // read invalid sites
 
-    //         // var contacts = client.users().byUserId(USER_ID).
+    // //         // var contacts = client.users().byUserId(USER_ID).
 
-    //         // var security = client.security().informationProtection().sensitivityLabels().get();
+    // //         // var security = client.security().informationProtection().sensitivityLabels().get();
 
-    //         // var sites = client.sites().get();
-    //         System.out.println("done");
-    //         } catch (ODataError err) {
-    //             System.out.println(err.getError().getCode());
-    //             System.out.println(err.getResponseStatusCode());
-    //             System.out.println(err.getMessage());
-    //         }
-    // }
+    // //         // var sites = client.sites().get();
+    // //         System.out.println("done");
+    // //         } catch (ODataError err) {
+    // //             System.out.println(err.getError().getCode());
+    // //             System.out.println(err.getResponseStatusCode());
+    // //             System.out.println(err.getMessage());
+    // //         }
+    // // }
 
-    // @Test void testPageIterator() {
-    //     TokenCredential credential = new ClientSecretCredentialBuilder()
-    //         .clientId(System.getenv("kiota_client_id"))
-    //         .clientSecret(System.getenv("kiota_client_secret"))
-    //         .tenantId(System.getenv("kiota_tenant_id"))
-    //         .build();
+    // // @Test void testPageIterator() {
+    // //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    // //         .clientId(System.getenv("kiota_client_id"))
+    // //         .clientSecret(System.getenv("kiota_client_secret"))
+    // //         .tenantId(System.getenv("kiota_tenant_id"))
+    // //         .build();
 
-    //     GraphServiceClient client = new GraphServiceClient(credential, ".default");
-    //     try {
-    //         MessageCollectionResponse messages = client.users().byUserId("pgichuhi@sk7xg.onmicrosoft.com").messages().get();
+    // //     GraphServiceClient client = new GraphServiceClient(credential, ".default");
+    // //     try {
+    // //         MessageCollectionResponse messages = client.users().byUserId("pgichuhi@sk7xg.onmicrosoft.com").messages().get();
 
-    //         AtomicInteger numMessages = new AtomicInteger(0);
+    // //         AtomicInteger numMessages = new AtomicInteger(0);
 
-    //         // Default page size is 10 messages
+    // //         // Default page size is 10 messages
 
-    //         PageIterator<Message, MessageCollectionResponse> pageIterator = new PageIterator.Builder<Message, MessageCollectionResponse>()
-    //                                 .client(client)
-    //                                 .collectionPage(messages)
-    //                                 .collectionPageFactory(MessageCollectionResponse::createFromDiscriminatorValue)
-    //                                 .processPageItemCallback(message -> {
-    //                                     System.out.println("MsgNumber: " + numMessages.incrementAndGet() + " Subject: " + message.getSubject());
-    //                                     return true;
-    //                                 })
-    //                                 .build();
-    //         pageIterator.iterate();
+    // //         PageIterator<Message, MessageCollectionResponse> pageIterator = new PageIterator.Builder<Message, MessageCollectionResponse>()
+    // //                                 .client(client)
+    // //                                 .collectionPage(messages)
+    // //                                 .collectionPageFactory(MessageCollectionResponse::createFromDiscriminatorValue)
+    // //                                 .processPageItemCallback(message -> {
+    // //                                     System.out.println("MsgNumber: " + numMessages.incrementAndGet() + " Subject: " + message.getSubject());
+    // //                                     return true;
+    // //                                 })
+    // //                                 .build();
+    // //         pageIterator.iterate();
 
-    //         System.out.println("Num of messages: " + numMessages.get());
+    // //         System.out.println("Num of messages: " + numMessages.get());
 
-    //     } catch (Exception ex) {
-    //         System.out.println(ex.getMessage());
-    //     }
-    // }
+    // //     } catch (Exception ex) {
+    // //         System.out.println(ex.getMessage());
+    // //     }
+    // // }
 
     // @Test
     // void testBatchRequest() {
@@ -703,6 +946,46 @@ class AppTest {
 
     //         BatchResponseContent batchResponseContent = client.getBatchRequestBuilder().post(batchRequestContent, null);
     //         var responses = batchResponseContent.getResponses();
+    //     } catch (ApiException ex) {
+    //         System.out.println(ex.getMessage());
+    //     } catch (Exception ex) {
+    //         System.out.println(ex.getMessage());
+    //     }
+    // }
+
+    // @Test
+    // void testBatchingWithDependsOn() {
+    //     TokenCredential credential = new ClientSecretCredentialBuilder()
+    //         .clientId(System.getenv("kiota_client_id"))
+    //         .clientSecret(System.getenv("kiota_client_secret"))
+    //         .tenantId(System.getenv("kiota_tenant_id"))
+    //         .build();
+
+    //     GraphServiceClient graphServiceClient = new GraphServiceClient(credential, ".default");
+
+    //     DriveItem driveItem = graphServiceClient.drives().byDriveId("").items().byDriveItemId("").withUrl(
+    //         "https://graph.microsoft.com/v1.0/users/{user-id}/drives/{drive-id}/items/{item-id}"
+    //     ).get();
+
+    //     try {
+    //         BatchRequestContent batchRequestContent = new BatchRequestContent(graphServiceClient);
+    //         var requestId =  batchRequestContent.addBatchRequestStep(
+    //             graphServiceClient.users().byUserId(USER_ID).drive().toGetRequestInformation()
+    //         );
+
+    //         var itemId = "01TFQELTITLHSGZMCUL5GJ7ECBLDMHI53C";
+    //         var dependentRequestInfo = graphServiceClient.drives().byDriveId("").withUrl(
+    //             "https://graph.microsoft.com/$" + requestId + "/items/" + itemId
+    //         ).toGetRequestInformation();
+    //         Request request = graphServiceClient.getRequestAdapter().convertToNativeRequest(dependentRequestInfo);
+    //         var batchRequestStep = new BatchRequestStep(
+    //             "2", request, Arrays.asList(new String[] { requestId })
+    //         );
+    //         batchRequestContent.addBatchRequestStep(batchRequestStep);
+
+    //         BatchResponseContent batchResponseContent = graphServiceClient.getBatchRequestBuilder().post(batchRequestContent, null);
+    //         var responses = batchResponseContent.getResponses();
+    //         System.out.println("Finished");
     //     } catch (ApiException ex) {
     //         System.out.println(ex.getMessage());
     //     } catch (Exception ex) {

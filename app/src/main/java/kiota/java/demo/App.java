@@ -38,8 +38,8 @@ public class App {
         // // AzureIdentityAuthenticationProvider authProvider = new AzureIdentityAuthenticationProvider(credential, null, "https://graph.microsoft.com/.default");
         // GraphServiceClient client = new GraphServiceClient(credential, "https://graph.microsoft.com/.default");
         // // GraphServiceClient client = new GraphServiceClient(authProvider);
-        // User result = client.users().byUserId(USER_ID).get();
-        // System.out.println(result.getDisplayName());
-        // System.out.println(result.getUserPrincipalName());
+        User result = client.users().byUserId(USER_ID).get();
+        System.out.println(result.getDisplayName());
+        System.out.println(result.getUserPrincipalName());
     }
 }
